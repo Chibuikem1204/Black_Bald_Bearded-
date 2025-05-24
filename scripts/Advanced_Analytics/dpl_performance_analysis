@@ -1,0 +1,39 @@
+/*Analyse the yearly performance of products by comparing their sales
+to both the average sales of the product and the previous year's sales*/
+
+
+WITH monthly_product_sales AS
+(
+SELECT
+	P.product_name,
+	month (F.order_date) order_month,
+	SUM(F.sales_amount) current_sales
+FROM gold.fact_sales F
+LEFT JOIN gold.dim_products P
+ON P.product_key = F.product_key
+WHERE order_date IS NOT NULL
+GROUP BY MONTH (F.order_date),
+			  P.product_name
+)
+
+SELECT
+	order_month,
+	product_name,
+	current_sales,
+	avg(current_sales) OVER (PARTITION BY product_name) AS avg_sales,
+	current_sales - avg(current_sales) OVER (PARTITION BY product_name) AS diff_avg,
+	CASE WHEN current_sales - avg(current_sales) OVER (PARTITION BY product_name) > 0 THEN 'above_avg'
+		WHEN current_sales - avg(current_sales) OVER (PARTITION BY product_name) < 0 THEN 'below_avg'
+		ELSE 'avg'
+	END avg_change,	
+
+	--month-over-month Sales
+	LAG (current_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales,
+	current_sales - lag (current_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_diff,
+	CASE WHEN current_sales - lag (current_sales) OVER (PARTITION BY product_name ORDER BY order_year) > 0 THEN 'increase'
+		WHEN current_sales - lag (current_sales) OVER (PARTITION BY product_name ORDER BY order_year) < 0 THEN 'decrease'
+		ELSE 'no change'
+	END pm_change
+FROM monthly_product_sales
+ORDER BY product_name,
+		 order_month
